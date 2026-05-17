@@ -57,6 +57,7 @@ Money laundering exploits **multi-hop transaction chains** that flat-text retrie
 ## Dataset
 
 ### Source
+https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml
 IBM HI-Small synthetic AML dataset — designed to simulate realistic money laundering activity.
 
 ### Coverage
