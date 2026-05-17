@@ -1031,3 +1031,14 @@ rag-benchmark-lab/
 └── database/
     └── chroma/                       # ChromaDB persistent storage
 ```
+# DEMO
+<img width="959" height="512" alt="image" src="https://github.com/user-attachments/assets/2d73a470-b286-4cd0-9d7d-7295e57b4ba1" />
+<img width="959" height="449" alt="image" src="https://github.com/user-attachments/assets/598aea53-787c-47c6-8f78-6405f8af2597" />
+<img width="731" height="439" alt="image" src="https://github.com/user-attachments/assets/0d1fc568-3ef9-42e2-a56f-031d47e78471" />
+<img width="731" height="420" alt="image" src="https://github.com/user-attachments/assets/4383eea6-6ea1-4841-9da8-7ef8c30d0c25" />
+<img width="732" height="432" alt="image" src="https://github.com/user-attachments/assets/c239204d-46d0-47df-9341-6dd46c32e81f" />
+
+
+
+
+
