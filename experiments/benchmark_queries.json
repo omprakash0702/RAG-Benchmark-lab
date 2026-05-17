@@ -1,0 +1,50 @@
+[
+  {
+    "id": "Q001",
+    "category": "repeated_wire_transfers",
+    "query": "Suspicious repeated wire transfers between foreign banks in different countries",
+    "description": "Tests detection of classic layering via international wire routing"
+  },
+  {
+    "id": "Q002",
+    "category": "circular_transactions",
+    "query": "Circular money movement where funds return to the originating account",
+    "description": "Tests detection of round-tripping schemes used to fabricate transaction history"
+  },
+  {
+    "id": "Q003",
+    "category": "layering_behavior",
+    "query": "Multiple rapid transfers through intermediary accounts to obscure fund origin",
+    "description": "Tests identification of classic three-stage laundering layering phase"
+  },
+  {
+    "id": "Q004",
+    "category": "high_frequency_transfers",
+    "query": "High frequency small transfers from one account to many recipients within hours",
+    "description": "Tests detection of smurfing and structuring patterns"
+  },
+  {
+    "id": "Q005",
+    "category": "multi_bank_routing",
+    "query": "Large transactions routed through multiple banks across jurisdictions",
+    "description": "Tests multi-hop routing detection across correspondent banking chains"
+  },
+  {
+    "id": "Q006",
+    "category": "structuring_patterns",
+    "query": "Transactions just below reporting thresholds from the same account repeated daily",
+    "description": "Tests detection of deliberate structuring to avoid currency transaction reports"
+  },
+  {
+    "id": "Q007",
+    "category": "cross_currency_conversion",
+    "query": "Rapid conversion between currencies across multiple banks with no clear business purpose",
+    "description": "Tests detection of currency conversion as an obfuscation technique"
+  },
+  {
+    "id": "Q008",
+    "category": "self_transfers",
+    "query": "Large self-transfers within the same account at unusual hours across several days",
+    "description": "Tests detection of account consolidation before layering or placement"
+  }
+]

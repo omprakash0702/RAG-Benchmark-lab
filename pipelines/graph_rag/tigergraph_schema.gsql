@@ -1,0 +1,83 @@
+CREATE VERTEX Account (
+    PRIMARY_ID account_id STRING,
+    entity_name STRING DEFAULT "",
+    account_type STRING DEFAULT "unknown",
+    home_bank STRING DEFAULT ""
+) WITH primary_id_as_attribute="true"
+
+CREATE VERTEX Bank (
+    PRIMARY_ID bank_id STRING,
+    bank_name STRING DEFAULT "",
+    country STRING DEFAULT ""
+) WITH primary_id_as_attribute="true"
+
+CREATE VERTEX Entity (
+    PRIMARY_ID entity_id STRING,
+    entity_name STRING DEFAULT "",
+    entity_type STRING DEFAULT "",
+    representative_account STRING DEFAULT ""
+) WITH primary_id_as_attribute="true"
+
+CREATE VERTEX Transaction (
+    PRIMARY_ID transaction_id STRING,
+    amount_paid DOUBLE DEFAULT 0.0,
+    payment_currency STRING DEFAULT "",
+    amount_received DOUBLE DEFAULT 0.0,
+    receiving_currency STRING DEFAULT "",
+    payment_type STRING DEFAULT "",
+    timestamp STRING DEFAULT "",
+    laundering_flag INT DEFAULT 0,
+    is_self_transfer INT DEFAULT 0,
+    is_cross_bank INT DEFAULT 0,
+    is_cross_currency INT DEFAULT 0,
+    transfer_type STRING DEFAULT ""
+) WITH primary_id_as_attribute="true"
+
+
+CREATE DIRECTED EDGE TRANSFERRED_TO (
+    FROM Account,
+    TO Account,
+    transaction_id STRING DEFAULT "",
+    amount_paid DOUBLE DEFAULT 0.0,
+    payment_currency STRING DEFAULT "",
+    timestamp STRING DEFAULT "",
+    transfer_type STRING DEFAULT "",
+    is_laundering INT DEFAULT 0
+)
+
+CREATE DIRECTED EDGE BELONGS_TO_BANK (
+    FROM Account,
+    TO Bank
+)
+
+CREATE DIRECTED EDGE INITIATED_TRANSACTION (
+    FROM Account,
+    TO Transaction,
+    timestamp STRING DEFAULT ""
+)
+
+CREATE DIRECTED EDGE RECEIVED_TRANSACTION (
+    FROM Transaction,
+    TO Account,
+    timestamp STRING DEFAULT ""
+)
+
+CREATE DIRECTED EDGE ASSOCIATED_WITH (
+    FROM Account,
+    TO Entity
+)
+
+CREATE GRAPH FinancialGraph (
+    Account,
+    Bank,
+    Entity,
+    Transaction,
+    TRANSFERRED_TO,
+    BELONGS_TO_BANK,
+    INITIATED_TRANSACTION,
+    RECEIVED_TRANSACTION,
+    ASSOCIATED_WITH
+)
+
+USE GRAPH FinancialGraph
+

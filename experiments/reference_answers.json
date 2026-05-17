@@ -1,0 +1,72 @@
+[
+  {
+    "id": "Q001",
+    "category": "repeated_wire_transfers",
+    "reference": "Repeated wire transfers between foreign banks across different countries represent a classic layering technique. Key risk indicators: multiple correspondent banking hops, identical or round-number amounts, no clear business justification, and beneficiary accounts with no prior relationship. Trace the complete transfer chain to identify ultimate beneficiary and originator. File SAR if funds cannot be reconciled to legitimate business. Flag accounts appearing at multiple transfer legs for enhanced due diligence."
+  },
+  {
+    "id": "Q002",
+    "category": "circular_transactions",
+    "reference": "Circular fund movement where funds return to the originating account is a confirmed indicator of round-tripping — fabricating transaction history or creating the appearance of legitimate revenue. Confirmed round-trips between account pairs (A sends to B, B sends back to A) represent the strongest evidence of circular layering. Risk is elevated when the cycle completes within 48 hours, involves multiple intermediary banks, and uses different currencies at each hop. Map all circular pairs in the network, calculate net economic gain (near-zero in pure laundering), identify pass-through intermediary accounts connecting the circle, and flag every account in the circular chain for SAR filing and enhanced due diligence."
+  },
+  {
+    "id": "Q003",
+    "category": "layering_behavior",
+    "reference": "Multiple rapid transfers through intermediary accounts to obscure fund origin represents the confirmed layering phase of money laundering. A confirmed pass-through intermediary receives funds from multiple inbound senders and immediately forwards to multiple outbound recipients — high inbound degree combined with high outbound degree is the structural signature. Red flags: multi-hop chains where each node in the chain is both a receiver and a sender, progressive currency conversion, new accounts with no prior transaction history. Reconstruct the full layering chain hop by hop, identify the placement source and integration destination, apply enhanced due diligence to all intermediary nodes, and escalate to MLRO with the complete chain documented."
+  },
+  {
+    "id": "Q004",
+    "category": "high_frequency_transfers",
+    "reference": "High-frequency small transfers from one account to many recipients within hours is a classic smurfing or fan-out structuring pattern designed to stay below regulatory reporting thresholds. Risk factors: large number of unique recipients (fan-out degree), amounts clustering just below $10,000, recipients showing no prior relationship to sender. Aggregate all transfers to calculate total moved in the period. Cross-reference recipients against watchlists. Verify sender has legitimate business justification for mass disbursements."
+  },
+  {
+    "id": "Q005",
+    "category": "multi_bank_routing",
+    "reference": "Large transactions routed through multiple banks across jurisdictions exploit correspondent banking relationships to obscure fund origin. High cross-bank transaction counts across many unique banks confirm deliberate multi-institution routing. Each banking hop reduces traceability, especially when high-anonymity or low-AML-enforcement jurisdictions are involved. Amounts may split or re-aggregate at each hop. Obtain correspondent banking records for every leg. Identify which jurisdiction has the weakest AML controls and focus SAR filing there. Verify the ultimate beneficial owner controls each intermediary account in the routing chain."
+  },
+  {
+    "id": "Q006",
+    "category": "structuring_patterns",
+    "reference": "Transactions just below reporting thresholds repeated daily is textbook structuring — a deliberate BSA/AML violation even without triggering a CTR. The pattern of staying just below $10,000 on consecutive days strongly implies awareness of reporting requirements. Aggregate all transactions over a 30-day window, calculate total moved, verify whether cash or wire. Cross-reference account activity with customer profile and stated business purpose. File a SAR based on the structuring pattern alone; no CTR trigger is required."
+  },
+  {
+    "id": "Q007",
+    "category": "cross_currency_conversion",
+    "reference": "Rapid currency conversion across multiple banks with no clear business purpose is a hallmark of integration-phase laundering. Currency conversion adds audit-trail complexity and may exploit weak controls in certain jurisdictions. High risk when conversions occur at non-commercial rates, through unrelated counterparties, or in rapid succession. Verify each exchange rate against market rates. Identify if a single beneficial owner controls both sides of the conversion. Check for offsetting or reversing transactions that indicate fictitious trading."
+  },
+  {
+    "id": "Q008",
+    "category": "self_transfers",
+    "reference": "Large self-transfers within the same account at unusual hours suggest fund consolidation before a major placement or layering event. Unusual timing (overnight, weekends), large round amounts, and subsequent rapid deployment of funds are key risk indicators. Self-transfers alone are not suspicious, but the combination of unusual timing and large amounts warrants review. Examine what happens immediately after the self-transfer, verify the account purpose matches the amounts, and check for subsequent transfers to high-risk counterparties or jurisdictions."
+  },
+  {
+    "id": "Q009",
+    "category": "pass_through_detection",
+    "reference": "Accounts acting as confirmed pass-through nodes — receiving inbound funds from multiple unique senders and immediately forwarding to multiple unique recipients — are a hallmark of money laundering intermediary accounts. A confirmed pass-through intermediary shows high inbound degree (many unique senders) combined with high outbound degree (many unique recipients) and near-zero net balance. Suspicious indicators: diverse sources and destinations with no retention of funds, high turnover relative to stated business purpose. Calculate velocity ratio (outbound volume / inbound volume). Map all upstream and downstream accounts connected to the pass-through node and determine whether they form a coordinated layering network. Apply enhanced due diligence and consider account freezing pending SAR investigation."
+  },
+  {
+    "id": "Q010",
+    "category": "flagged_counterparties",
+    "reference": "Accounts that exclusively or predominantly transact with flagged or high-risk counterparties suggest participation in a coordinated laundering network. Guilt by association is not sufficient alone, but an account with 80%+ transactions involving previously flagged entities warrants immediate investigation. Map the full counterparty network, identify how the account entered the network, and determine if it is a witting participant or an unwitting intermediary. Cross-reference all counterparties against OFAC, FinCEN, and internal watchlists. Elevated SAR filing priority."
+  },
+  {
+    "id": "Q011",
+    "category": "cross_bank_cheque",
+    "reference": "Cheque payments routed to accounts at multiple different banks by the same sender can indicate deliberate fragmentation to avoid single-institution monitoring. Paper-based instruments like cheques also introduce clearing delays that complicate tracing. Key indicators: cheques to 5+ different destination banks within a short window, round amounts, no payee relationship to sender's stated business. Obtain cheque images and verify payee names. Correlate deposit timing with clearing windows. Assess whether fragmentation pattern suggests threshold avoidance."
+  },
+  {
+    "id": "Q012",
+    "category": "cross_bank_wire",
+    "reference": "Wire transfers sent to multiple different banks by the same account — particularly across jurisdictions — is a common layering technique. Each destination bank represents a potential break in the audit trail. Risk escalates with: offshore destination banks, correspondent banking chains, rapid re-transfer after receipt, and currency conversion at destination. Obtain SWIFT records for all legs. Map the full wire network graph. Identify whether recipient accounts belong to the same beneficial owner using corporate registry cross-checks."
+  },
+  {
+    "id": "Q013",
+    "category": "cash_fan_out",
+    "reference": "Cash transactions disbursed to a large number of unique recipients is a severe structuring and smurfing risk indicator. Cash is the highest-risk payment format due to anonymity — each recipient represents a potential placement point. When a single account sends cash to more than 5 unique recipients, it suggests coordinated cash distribution to avoid individual reporting thresholds. Identify all recipient accounts, check for coordinated activity patterns, verify sender business justification for mass cash disbursements, and calculate aggregate amounts per recipient. File CTRs and SAR immediately."
+  },
+  {
+    "id": "Q014",
+    "category": "suspicious_investigation",
+    "reference": "A comprehensive AML investigation of suspicious cross-bank activity should: identify all accounts in the transaction network and their banking relationships, detect structural patterns such as confirmed layering chains, fan-out disbursements, circular flows between account pairs, and confirmed pass-through intermediaries with high inbound and outbound degree, flag accounts with high pass-through volume and near-zero net balance, assess laundering phase (placement / layering / integration) based on the network topology, and prioritize accounts for SAR filing based on network centrality, pass-through degree, and transaction volume. Document the full evidence chain linking source funds to final destination. Apply enhanced due diligence to all intermediary nodes in the confirmed layering chain."
+  }
+]

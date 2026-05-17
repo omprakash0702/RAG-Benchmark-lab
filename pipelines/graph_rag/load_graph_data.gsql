@@ -1,0 +1,557 @@
+// =============================================================================
+// load_graph_data.gsql — TigerGraph CSV Loading Jobs for FinancialGraph
+// =============================================================================
+//
+// PURPOSE
+//   Ingests the eight CSV files produced by build_graph_data.py into the
+//   FinancialGraph schema installed by tigergraph_schema.gsql.  After these
+//   jobs complete, the graph is queryable by the GraphRAG retrieval pipeline.
+//
+// PREREQUISITES
+//   1. tigergraph_schema.gsql has been executed and the FinancialGraph schema
+//      is installed and visible in TigerGraph Studio or via:
+//        SHOW GRAPH FinancialGraph
+//   2. CSV files exist at the configured paths (see PATH CONFIGURATION below).
+//   3. TigerGraph Community Edition 4.2.2 or later.
+//
+// EXECUTION
+//   Run the full file in one shot from the GSQL shell:
+//     $ gsql load_graph_data.gsql
+//
+//   Or paste section-by-section into TigerGraph Studio's GSQL Editor.
+//
+// LOAD ORDER — vertices must exist before their edges are created
+//   Phase 1 (Vertices):  Bank → Entity → Account → Transaction
+//   Phase 2 (Edges):     TRANSFERRED_TO → BELONGS_TO_BANK
+//                        → INITIATED_TRANSACTION → RECEIVED_TRANSACTION
+//
+//   Why this order matters:
+//   TigerGraph validates that every edge endpoint vertex already exists at
+//   load time.  If TRANSFERRED_TO edges are loaded before Account vertices,
+//   the loader will reject every row whose FROM or TO account_id has not yet
+//   been inserted.  The Bank-before-Account ordering satisfies the BELONGS_TO_BANK
+//   constraint for the same reason.  Entities are loaded before Accounts because
+//   ASSOCIATED_WITH edges (populated via a post-load query) point Account → Entity.
+//
+// RUNTIME PATH OVERRIDE
+//   Every RUN LOADING JOB command below accepts a USING clause that overrides
+//   the default file path without editing this file.  Example:
+//
+//     RUN LOADING JOB load_banks USING f_banks="/new/path/banks.csv"
+//
+//   This is the production-style configuration mechanism — set the paths in
+//   RUN commands from your deployment script rather than hard-coding them here.
+//
+// SCALING CONSIDERATIONS
+//   The HI-Small corpus generates ~5M Transaction vertices and ~20M+ edges.
+//   Loading strategies for production scale:
+//
+//   1. Split large CSVs — TigerGraph parallelises across multiple files.
+//      Split transactions.csv into 10 shards for 10x throughput:
+//        DEFINE FILENAME f1 = "transactions_00.csv"
+//        DEFINE FILENAME f2 = "transactions_01.csv"
+//        LOAD f1 | f2 TO VERTEX Transaction VALUES (...)
+//
+//   2. Increase loader threads — set tigergraph.cfg loader.thread.count
+//      to match available CPU cores before running heavy jobs.
+//
+//   3. Disable real-time stats during load — if STATS were enabled on edges,
+//      they are updated asynchronously and do not block loading.
+//
+//   4. Upsert safety — all jobs use upsert semantics by default.
+//      Re-running a job after a partial failure is safe; duplicate rows are
+//      merged rather than inserted twice.
+//
+//   Estimated load time on a single-node 16 GB instance:
+//     Vertices  (~5.4M total)  :  2–4 min
+//     Edges     (~20M total)   :  8–15 min
+//
+// =============================================================================
+
+
+USE GRAPH FinancialGraph
+
+
+// =============================================================================
+// PATH CONFIGURATION
+// =============================================================================
+//
+// Set every DEFINE FILENAME path below to the absolute location of the CSV
+// files on the TigerGraph server (or a shared mount accessible to the server).
+//
+// Common deployment scenarios:
+//
+//   Local / on-prem Linux:
+//     /home/tigergraph/rag-benchmark-lab/datasets/graph/
+//
+//   Docker (volume-mounted):
+//     /home/tigergraph/mydata/graph/
+//
+//   TigerGraph Cloud (files must be uploaded to the instance first):
+//     /home/tigergraph/data/graph/
+//
+//   Windows development machine running TigerGraph in WSL2:
+//     /mnt/c/study/projects/rag-benchmark-lab/datasets/graph/
+//
+// Change BASE_PATH in each DEFINE FILENAME — a simple find-and-replace of
+// "/PATH/TO/datasets/graph" across this file is sufficient.
+
+
+// =============================================================================
+// PHASE 1 — VERTEX LOADING JOBS
+// =============================================================================
+//
+// Load all vertex types before any edge types.  Within Phase 1, Bank and
+// Entity vertices are loaded before Account because Account.home_bank is a
+// denormalized reference, and ASSOCIATED_WITH (Account→Entity) must resolve
+// at query time.  Transaction vertices are loaded last in Phase 1 because
+// both INITIATED_TRANSACTION (Account→Transaction) and RECEIVED_TRANSACTION
+// (Transaction→Account) reference them; loading after Account ensures all
+// endpoint vertex types are present when edge jobs run in Phase 2.
+
+
+// ---------------------------------------------------------------------------
+// JOB 1: Bank vertices  —  banks.csv
+//
+// CSV columns:  bank_id
+//
+// bank_name and country are not in the generated CSV (build_graph_data.py
+// only captures bank_id from transaction metadata).  Those attributes default
+// to "" and can be enriched post-load from HI-Small_accounts.csv using the
+// GSQL update query shown in the validation section below.
+//
+// Why Bank first:  Account.home_bank is a STRING reference to a Bank vertex.
+// Loading Bank before Account means any query that traverses BELONGS_TO_BANK
+// immediately after the load will resolve correctly without waiting for a
+// deferred vertex insertion.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_banks FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_banks = "/home/tigergraph/data/graph/banks.csv";
+
+    // VALUES position order must match CREATE VERTEX attribute order:
+    //   (PRIMARY_ID: bank_id,  bank_name,  country)
+    LOAD f_banks
+        TO VERTEX Bank VALUES (
+            $"bank_id",     // PRIMARY_ID → bank_id
+            _,              // bank_name  → default ""
+            _               // country    → default ""
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// ---------------------------------------------------------------------------
+// JOB 2: Entity vertices  —  entities.csv
+//
+// CSV columns:  entity_id,  entity_name,  representative_account
+//
+// entity_type is not captured in build_graph_data.py (it can be derived from
+// entity_name, e.g. "Corporation #..." → "Corporation").  Set to "" for now;
+// a post-load UPDATE query can parse and backfill it without reloading.
+//
+// Why Entity before Account:  ASSOCIATED_WITH edges point Account → Entity.
+// Having Entity vertices present before Account load does not affect the edge
+// load (which runs in Phase 2), but ensures consistent graph state throughout.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_entities FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_entities = "/home/tigergraph/data/graph/entities.csv";
+
+    // CREATE VERTEX Entity attribute order:
+    //   (PRIMARY_ID: entity_id,  entity_name,  entity_type,  representative_account)
+    LOAD f_entities
+        TO VERTEX Entity VALUES (
+            $"entity_id",              // PRIMARY_ID → entity_id
+            $"entity_name",            // entity_name
+            _,                         // entity_type → default "" (enrich post-load)
+            $"representative_account"  // representative_account
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// ---------------------------------------------------------------------------
+// JOB 3: Account vertices  —  accounts.csv
+//
+// CSV columns:  account_id,  home_bank,  entity_name
+//
+// account_type is not present in the generated CSV.  It defaults to "unknown".
+// Enrich post-load from a business rules query (e.g. accounts with >1000
+// outgoing transfers → "high_volume"; accounts with entity_type "Corporation"
+// → "corporate") without reloading the full CSV.
+//
+// Note: CSV column order differs from schema attribute order.
+//   CSV:    account_id | home_bank | entity_name
+//   Schema: account_id | entity_name | account_type | home_bank
+// The $"column_name" reference syntax handles this — order in VALUES follows
+// schema definition order, but column names are resolved from the CSV header.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_accounts FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_accounts = "/home/tigergraph/data/graph/accounts.csv";
+
+    // CREATE VERTEX Account attribute order:
+    //   (PRIMARY_ID: account_id,  entity_name,  account_type,  home_bank)
+    LOAD f_accounts
+        TO VERTEX Account VALUES (
+            $"account_id",   // PRIMARY_ID → account_id
+            $"entity_name",  // entity_name
+            _,               // account_type → default "unknown"
+            $"home_bank"     // home_bank
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// ---------------------------------------------------------------------------
+// JOB 4: Transaction vertices  —  transactions.csv
+//
+// CSV columns:
+//   transaction_id, amount_paid, payment_currency, amount_received,
+//   receiving_currency, payment_format, timestamp, is_laundering,
+//   is_self_transfer, is_cross_bank, is_cross_currency, transfer_type
+//
+// ATTRIBUTE REMAPPING (CSV column → schema attribute):
+//   payment_format  → payment_type      (schema normalises to generic "type")
+//   is_laundering   → laundering_flag   (schema uses flag naming convention)
+//
+// laundering_flag is the ground-truth AML label from the HI-Small synthetic
+// injection.  Preserving it in the graph lets traversal queries filter to
+// confirmed-laundering paths during benchmark evaluation without a JOIN.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_transactions FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_transactions = "/home/tigergraph/data/graph/transactions.csv";
+
+    // CREATE VERTEX Transaction attribute order:
+    //   (PRIMARY_ID: transaction_id,
+    //    amount_paid, payment_currency,
+    //    amount_received, receiving_currency,
+    //    payment_type,     ← from payment_format in CSV
+    //    timestamp,
+    //    laundering_flag,  ← from is_laundering in CSV
+    //    is_self_transfer, is_cross_bank, is_cross_currency,
+    //    transfer_type)
+    LOAD f_transactions
+        TO VERTEX Transaction VALUES (
+            $"transaction_id",     // PRIMARY_ID → transaction_id
+            $"amount_paid",        // amount_paid     (DOUBLE)
+            $"payment_currency",   // payment_currency
+            $"amount_received",    // amount_received (DOUBLE)
+            $"receiving_currency", // receiving_currency
+            $"payment_format",     // payment_type    ← remapped from payment_format
+            $"timestamp",          // timestamp
+            $"is_laundering",      // laundering_flag ← remapped from is_laundering
+            $"is_self_transfer",   // is_self_transfer (INT 0/1)
+            $"is_cross_bank",      // is_cross_bank    (INT 0/1)
+            $"is_cross_currency",  // is_cross_currency (INT 0/1)
+            $"transfer_type"       // transfer_type (SELF_TRANSFER | SAME_BANK | CROSS_BANK)
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// =============================================================================
+// PHASE 2 — EDGE LOADING JOBS
+// =============================================================================
+//
+// Edge loads run after all vertex jobs complete.  TigerGraph's loader checks
+// that every FROM and TO vertex ID already exists in the graph; rows whose
+// endpoints are missing are silently dropped (not errors).  This means:
+//
+//   • Running edge jobs before vertex jobs → all rows dropped, zero edges loaded
+//   • Partial vertex load followed by edge load → subset of edges loaded
+//
+// For the full 5M corpus, verify Phase 1 vertex counts before starting Phase 2.
+// Use the validation queries at the end of this file to confirm.
+//
+// Edge load order within Phase 2 is flexible — there are no inter-edge
+// dependencies.  The order below matches data volume (largest jobs first) so
+// that the most expensive work starts while smaller jobs are queued.
+
+
+// ---------------------------------------------------------------------------
+// JOB 5: TRANSFERRED_TO edges  —  transferred_edges.csv
+//
+// CSV columns:
+//   from_account, to_account, transaction_id, amount_paid,
+//   payment_currency, timestamp, transfer_type, is_laundering
+//
+// This is the primary traversal edge for GraphRAG retrieval.
+// At full corpus scale (~5M rows) this is the largest single edge file.
+// Consider splitting into shards for parallel loading in production.
+//
+// transfer_type on the edge (SELF_TRANSFER | SAME_BANK | CROSS_BANK) allows
+// traversal predicates to filter path types without fetching Transaction
+// vertices, reducing per-hop I/O in multi-hop cycle detection queries.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_transferred_to_edges FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_transferred = "/home/tigergraph/data/graph/transferred_edges.csv";
+
+    // Edge VALUES order: (FROM_id, TO_id, attr1, attr2, ...)
+    // Attribute order follows CREATE DIRECTED EDGE TRANSFERRED_TO definition:
+    //   transaction_id, amount_paid, payment_currency, timestamp,
+    //   transfer_type, is_laundering
+    LOAD f_transferred
+        TO EDGE TRANSFERRED_TO VALUES (
+            $"from_account",     // FROM Account (sender)
+            $"to_account",       // TO   Account (receiver)
+            $"transaction_id",   // transaction_id
+            $"amount_paid",      // amount_paid  (DOUBLE)
+            $"payment_currency", // payment_currency
+            $"timestamp",        // timestamp
+            $"transfer_type",    // transfer_type
+            $"is_laundering"     // is_laundering (INT 0/1)
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// ---------------------------------------------------------------------------
+// JOB 6: BELONGS_TO_BANK edges  —  bank_edges.csv
+//
+// CSV columns:  account_id,  bank_id
+//
+// One row per unique account — total edges equals total Account vertices.
+// This edge is the institutional clustering link used by queries that group
+// accounts by bank and compute cross-institution flow ratios.
+// No edge attributes; the FROM/TO IDs carry all necessary information.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_belongs_to_bank_edges FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_bank_edges = "/home/tigergraph/data/graph/bank_edges.csv";
+
+    LOAD f_bank_edges
+        TO EDGE BELONGS_TO_BANK VALUES (
+            $"account_id",  // FROM Account
+            $"bank_id"      // TO   Bank
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// ---------------------------------------------------------------------------
+// JOB 7: INITIATED_TRANSACTION edges  —  initiated_edges.csv
+//
+// CSV columns:  account_id,  transaction_id,  timestamp
+//
+// Sender-to-event link: FROM Account TO Transaction.
+// CSV column order (account_id, transaction_id) matches edge direction
+// (FROM Account, TO Transaction), so no column reordering is needed.
+//
+// GraphRAG use: "find all transactions initiated by account X in window W"
+// resolves in one hop — no full TRANSFERRED_TO scan required.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_initiated_transaction_edges FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_initiated = "/home/tigergraph/data/graph/initiated_edges.csv";
+
+    // Edge attribute order: (FROM_id, TO_id, timestamp)
+    LOAD f_initiated
+        TO EDGE INITIATED_TRANSACTION VALUES (
+            $"account_id",     // FROM Account (sender)
+            $"transaction_id", // TO   Transaction
+            $"timestamp"       // timestamp
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// ---------------------------------------------------------------------------
+// JOB 8: RECEIVED_TRANSACTION edges  —  received_edges.csv
+//
+// CSV columns:  account_id,  transaction_id,  timestamp
+//
+// IMPORTANT — column order is REVERSED relative to edge direction.
+// The edge is defined as:  FROM Transaction  TO Account
+// But the CSV stores:       account_id (receiver)  |  transaction_id
+//
+// Therefore VALUES must supply ($"transaction_id", $"account_id", ...) —
+// FROM Transaction first, then TO Account — even though transaction_id is
+// the second CSV column.  The $"column_name" reference syntax handles this
+// without requiring a reordered CSV file.
+//
+// Why this edge direction?  It makes multi-hop chain queries natural:
+//   Account -[INITIATED_TRANSACTION]-> Transaction -[RECEIVED_TRANSACTION]-> Account
+// reads left-to-right as money flowing through the event vertex to the
+// recipient, matching analyst intuition about fund flow.
+// ---------------------------------------------------------------------------
+CREATE LOADING JOB load_received_transaction_edges FOR GRAPH FinancialGraph {
+    DEFINE FILENAME f_received = "/home/tigergraph/data/graph/received_edges.csv";
+
+    // FROM = Transaction, TO = Account  (reversed from CSV column order)
+    LOAD f_received
+        TO EDGE RECEIVED_TRANSACTION VALUES (
+            $"transaction_id", // FROM Transaction  ← second CSV column
+            $"account_id",     // TO   Account      ← first CSV column
+            $"timestamp"       // timestamp
+        )
+        USING SEPARATOR = ",", HEADER = "true";
+}
+
+
+// =============================================================================
+// RUN LOADING JOBS — PHASE 1: VERTICES
+// =============================================================================
+//
+// Execute in this exact order.  Each RUN command blocks until the job
+// completes or fails before the next one starts.
+//
+// To override the file path at runtime without editing this file:
+//   RUN LOADING JOB load_banks USING f_banks="/alternative/path/banks.csv"
+//
+// To monitor a running job from another GSQL session:
+//   SHOW LOADING STATUS load_banks
+//
+// To abort a job in progress:
+//   ABORT LOADING JOB load_banks
+
+RUN LOADING JOB load_banks
+RUN LOADING JOB load_entities
+RUN LOADING JOB load_accounts
+RUN LOADING JOB load_transactions
+
+
+// =============================================================================
+// RUN LOADING JOBS — PHASE 2: EDGES
+// =============================================================================
+//
+// Do not run Phase 2 until Phase 1 is confirmed complete.
+// Use the validation queries below to verify vertex counts before proceeding.
+//
+// Edge load order within Phase 2 is independent; jobs can be run in any
+// sequence.  The order below processes the largest file first (TRANSFERRED_TO)
+// so peak I/O happens while the system is freshest.
+
+RUN LOADING JOB load_transferred_to_edges
+RUN LOADING JOB load_belongs_to_bank_edges
+RUN LOADING JOB load_initiated_transaction_edges
+RUN LOADING JOB load_received_transaction_edges
+
+
+// =============================================================================
+// VALIDATION QUERIES
+// =============================================================================
+//
+// WHY VALIDATION MATTERS FOR GRAPHRAG RETRIEVAL
+//
+// A graph traversal retrieval pipeline fails silently if the graph is
+// partially loaded.  Unlike vector search (where a missing chunk means a
+// slightly worse result), a missing vertex in a graph means an edge endpoint
+// is dangling — traversal terminates early and returns an incomplete subgraph.
+// The LLM then reasons from incomplete evidence, producing answers that appear
+// confident but miss entire transaction chains.
+//
+// Validate in two phases:
+//   Phase 1 check  — vertex counts match expected totals from build_graph_data.py
+//   Phase 2 check  — edge counts match; TRANSFERRED_TO == Transaction count
+//
+// Expected counts for the FULL 5M corpus (dev mode values are proportional):
+//   Account         ~300,000 – 400,000  unique accounts
+//   Bank            ~200               unique bank codes
+//   Entity          ~20,000            unique legal entities (from accounts CSV)
+//   Transaction     ~5,078,345         one per narrative row
+//   TRANSFERRED_TO  ~5,078,345         one per transaction (Account→Account)
+//   BELONGS_TO_BANK ~300,000 – 400,000 one per Account vertex
+//   INITIATED       ~5,078,345         one per transaction (sender link)
+//   RECEIVED        ~5,078,345         one per transaction (receiver link)
+//
+// For the DEV subset (first 100,000 rows from build_graph_data.py --dev):
+//   Account         ~81,352
+//   Bank            ~4,598
+//   Entity          ~57,285
+//   Transaction     100,000
+//   TRANSFERRED_TO  100,000
+//   BELONGS_TO_BANK ~81,352
+//   INITIATED       100,000
+//   RECEIVED        100,000
+//
+// Run these SELECT statements in the GSQL shell after loading completes.
+// They execute as interpreted queries — no INSTALL QUERY step required.
+
+// --- Vertex counts ----------------------------------------------------------
+
+SELECT COUNT(*) FROM Account
+
+SELECT COUNT(*) FROM Bank
+
+SELECT COUNT(*) FROM Entity
+
+SELECT COUNT(*) FROM Transaction
+
+// --- Edge counts ------------------------------------------------------------
+
+SELECT COUNT(*) FROM Account -(TRANSFERRED_TO)-> Account
+
+SELECT COUNT(*) FROM Account -(BELONGS_TO_BANK)-> Bank
+
+SELECT COUNT(*) FROM Account -(INITIATED_TRANSACTION)-> Transaction
+
+SELECT COUNT(*) FROM Transaction -(RECEIVED_TRANSACTION)-> Account
+
+// --- Consistency check: laundering label distribution ----------------------
+//
+// Confirms that laundering_flag values were loaded correctly.
+// In the HI-Small dataset roughly 2–5% of transactions are synthetic AML
+// injections (laundering_flag = 1).  A count of 0 for flag=1 means the
+// is_laundering → laundering_flag remapping failed during transaction load.
+
+SELECT COUNT(*) FROM Transaction WHERE laundering_flag == 1
+
+SELECT COUNT(*) FROM Transaction WHERE laundering_flag == 0
+
+// --- Connectivity spot-check: every Account should belong to exactly one Bank
+//
+// If BELONGS_TO_BANK edge count significantly differs from Account count,
+// some accounts were loaded without a home bank — check bank_edges.csv for
+// missing rows or mismatched bank_id values.
+
+// --- Post-load enrichment hooks (run manually as needed) --------------------
+//
+// 1. Populate entity_type from entity_name pattern matching:
+//
+//    CREATE QUERY enrich_entity_types() FOR GRAPH FinancialGraph {
+//        AllEntities = {Entity.*};
+//        UPDATE e FROM AllEntities:e
+//        SET e.entity_type =
+//            CASE
+//                WHEN FIND(e.entity_name, "Corporation") >= 0 THEN "Corporation"
+//                WHEN FIND(e.entity_name, "Partnership")  >= 0 THEN "Partnership"
+//                WHEN FIND(e.entity_name, "Sole")         >= 0 THEN "SoleProprietorship"
+//                ELSE "Unknown"
+//            END;
+//        PRINT "entity_type enrichment complete";
+//    }
+//    INSTALL QUERY enrich_entity_types
+//    RUN QUERY enrich_entity_types()
+//
+// 2. Populate ASSOCIATED_WITH edges from Account.entity_name → Entity.entity_id:
+//
+//    CREATE QUERY link_accounts_to_entities() FOR GRAPH FinancialGraph {
+//        SumAccum<INT> @@inserted;
+//        AllAccounts = {Account.*};
+//        tmp = SELECT a FROM AllAccounts:a
+//              WHERE a.entity_name != ""
+//              ACCUM
+//                  STRING eid = "ENT_" + UPPER(REPLACE(a.entity_name, " ", "_")),
+//                  INSERT INTO ASSOCIATED_WITH VALUES (a, eid),
+//                  @@inserted += 1;
+//        PRINT @@inserted AS associated_with_edges_created;
+//    }
+//    INSTALL QUERY link_accounts_to_entities
+//    RUN QUERY link_accounts_to_entities()
+//
+// 3. Verify ASSOCIATED_WITH after step 2:
+//
+//    SELECT COUNT(*) FROM Account -(ASSOCIATED_WITH)-> Entity
+
+
+// =============================================================================
+// END OF LOADING JOBS
+// =============================================================================
+//
+// NEXT STEPS
+//   1. Confirm all SELECT COUNT(*) results match expected values above.
+//   2. Run enrichment hooks (entity_type, ASSOCIATED_WITH) if needed.
+//   3. Implement the GSQL traversal queries referenced in tigergraph_schema.gsql
+//      Section 6 (get_account_subgraph, find_transfer_cycles, etc.).
+//   4. Wire the traversal query outputs into
+//      pipelines/graph_rag/generate_answer.py so subgraph context replaces
+//      ChromaDB vector chunks as the LLM prompt evidence.
+//   5. Add GraphRAG to experiments/run_benchmark.py PIPELINES list and run
+//      the three-way benchmark: LLM-only vs Basic RAG vs GraphRAG.

@@ -1,0 +1,95 @@
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+*.env
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+wheels/
+*.whl
+pip-log.txt
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.virtualenv/
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── IDEs ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Raw source data (download from Google Drive — see DOWNLOADS.md) ───────────
+datasets/raw/*.csv
+datasets/raw/*.parquet
+datasets/raw/*.xlsx
+
+# ── Generated narrative data (~2.7 GB) ───────────────────────────────────────
+datasets/processed/*.jsonl
+datasets/processed/*.json
+
+# ── Chunked data ──────────────────────────────────────────────────────────────
+datasets/chunks/*.jsonl
+datasets/chunks/*.json
+
+# ── TigerGraph import CSVs (~511 MB) ─────────────────────────────────────────
+datasets/graph/*.csv
+
+# ── ChromaDB vector store (download or regenerate) ───────────────────────────
+datasets/chromadb/*.sqlite3
+datasets/chromadb/*/
+
+# ── ChromaDB persistent storage ──────────────────────────────────────────────
+database/chroma/*.sqlite3
+database/chroma/*/
+
+# ── Docker / archive images ──────────────────────────────────────────────────
+*.tar.gz
+*.tar
+*.zip
+
+# ── Benchmark outputs (auto-generated) ───────────────────────────────────────
+experiments/benchmark_results/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+.claude/
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
