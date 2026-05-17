@@ -2,31 +2,7 @@
 
 A benchmark system comparing three retrieval-augmented generation architectures for Anti-Money Laundering (AML) investigation on the IBM HI-Small synthetic transaction dataset. Each pipeline answers the same financial crime query and is evaluated on latency, cost, LLM-judge quality (6 dimensions), and BERTScore semantic similarity against expert reference answers.
 
----
 
-## Table of Contents
-
-- [Project Overview](#project-overview)
-- [Why GraphRAG for AML?](#why-graphrag-for-aml)
-- [Dataset](#dataset)
-- [System Architecture](#system-architecture)
-- [Pipeline 1 — LLM-Only Baseline](#pipeline-1--llm-only-baseline)
-- [Pipeline 2 — Basic RAG](#pipeline-2--basic-rag-vector-semantic-retrieval)
-- [Pipeline 3 — GraphRAG](#pipeline-3--graphrag-knowledge-graph-traversal)
-- [Ingestion Pipeline](#ingestion-pipeline)
-- [Query Intent Classification](#query-intent-classification)
-- [Streamlit Dashboard](#streamlit-dashboard)
-- [Evaluation Suite](#evaluation-suite)
-- [Performance Comparison](#performance-comparison)
-- [Benchmark Results Summary](#benchmark-results-summary)
-- [Technology Stack](#technology-stack)
-- [Setup & Installation](#setup--installation)
-- [Usage](#usage)
-- [Known Queryable Accounts](#known-queryable-accounts)
-- [Sample Queries](#sample-queries)
-- [Project Structure](#project-structure)
-
----
 
 ## Project Overview
 
